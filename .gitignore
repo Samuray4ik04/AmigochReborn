@@ -1,3 +1,22 @@
-/.venv
-/memory.json
-/.env
+# === ENV & virtual environment ===
+.env
+.venv/
+venv/
+env/
+*/.env
+*/.venv/
+
+# === Bot runtime data ===
+memory.json
+*.log
+logs/
+__pycache__/
+*.pyc
+
+# === IDE / Editor junk ===
+.vscode/
+.idea/
+.DS_Store
+
+# === System files ===
+Thumbs.db
