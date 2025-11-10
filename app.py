@@ -19,7 +19,7 @@ import sys
 
 # ===|Settings|===
 load_dotenv()
-genai.configure(api_key=os.getenv("GENAI_API_KEY"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 bot = Bot(token=os.getenv("BOT_TOKEN"))
 dp = Dispatcher()
