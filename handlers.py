@@ -167,10 +167,12 @@ async def cmd_uptime(message: types.Message):
 async def chat(message: types.Message):
     u = utils.user(message)
     logger.debug(f"Message from (@{u.username}) [{u.id}]: {message.text}")
-    if u.id in master:
+    reply = await ask_gemini(message.chat.id, message.text)
+    await message.reply(reply, parse_mode="HTML")
+"""    if u.id in master:
         reply = await ask_gemini(message.chat.id, message.text)
         await message.reply(reply, parse_mode="HTML")
-"""    else:
+    else:
         logger.critical(f"@{u.username} / {u.id} used the bot without permission.")
         await message.reply("<b>Get off me!</b>", parse_mode="HTML")
 """
