@@ -3,6 +3,9 @@ import os
 from aiogram import types
 import datetime
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 def user(message: types.Message):
@@ -27,3 +30,6 @@ def format_timedelta(td: datetime.timedelta) -> str:
     parts.append(f"{minutes:02}m")
     parts.append(f"{seconds:02}s")
     return " ".join(parts)
+
+def version():
+    return os.getenv('VERSION')

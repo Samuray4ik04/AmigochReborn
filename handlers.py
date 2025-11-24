@@ -52,7 +52,7 @@ async def ask_gemini(chat_id: int, user_message: str):
     history.append({"role": "user", "parts": user_message})
 
     # answer generate
-    model = genai.GenerativeModel("gemini-2.5-flash-lite", system_instruction=prompt)
+    model = genai.GenerativeModel("gemini-2.5-flash", system_instruction=prompt)
     response = model.generate_content(history)
 
     # save to memory
@@ -76,6 +76,7 @@ async def start(message: types.Message):
     else:
         logger.critical(f"@{u.username} / {u.id} started the bot without permission.")
         await message.reply(f"Yo, how you find me <a href='tg://user?id={u.id}'>{u.full_name}</a>?", parse_mode="HTML")
+        await message.answer(f"<b>This is a test bot (<i>Version: {utils.version()}</i>)</b>\nSo please be carefull and send all bugs to <b><u>@monkeBananchik / @IgorVasilekIV</u></b>")
 
 
 @router.message(Command("clear"))
@@ -169,10 +170,10 @@ async def chat(message: types.Message):
     if u.id in master:
         reply = await ask_gemini(message.chat.id, message.text)
         await message.reply(reply, parse_mode="HTML")
-    else:
+"""    else:
         logger.critical(f"@{u.username} / {u.id} used the bot without permission.")
         await message.reply("<b>Get off me!</b>", parse_mode="HTML")
-
+"""
 
 
 # ===|AP Callbacks|===
