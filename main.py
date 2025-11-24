@@ -1,3 +1,6 @@
+# TODO: память для каждого отдельна. фидбек. 
+
+
 import subprocess
 import sys
 import os

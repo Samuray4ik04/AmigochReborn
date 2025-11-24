@@ -57,7 +57,7 @@ async def ask_gemini(chat_id: int, user_message: str):
 
     # save to memory
     history.append({"role": "model", "parts": response.text})
-    memory[str(chat_id)] = history[-50:]  # keep only last 50 messages
+    memory[str(chat_id)] = history[-40:]  # keep only last 40 messages
     save_memory(memory)
 
     return response.text
@@ -68,29 +68,29 @@ async def ask_gemini(chat_id: int, user_message: str):
 @router.message(Command("start")) 
 async def start(message: types.Message):
     u = utils.user(message)
-    logger.debug(f"One of admins ({u.username}) started the bot. (start command)")
     if u.id in master:
+        logger.debug(f"One of admins ({u.username}) started the bot. (start command)")
         await message.answer(f"Hi @{u.username} / <a href='{u.id}'>{u.first_name}</a>! This is a test bot", parse_mode="HTML")
         await asyncio.sleep(0.5)
-        await message.reply("Glad to see you, master <a href='tg://emoji?id=5335013413640748545'>🫣</a>", parse_mode="HTML")
+        await message.reply("Glad to see you, master <a href='tg://emoji?id=5335013413640748545'>😊</a>", parse_mode="HTML")
     else:
         logger.critical(f"@{u.username} / {u.id} started the bot without permission.")
         await message.reply(f"Yo, how you find me <a href='tg://user?id={u.id}'>{u.full_name}</a>?", parse_mode="HTML")
-        await message.answer(f"<b>This is a test bot (<i>Version: {utils.version()}</i>)</b>\nSo please be carefull and send all bugs to <b><u>@monkeBananchik / @IgorVasilekIV</u></b>")
+        await message.answer(f"<b>This is a test bot (<i>Version: {utils.version()}</i>)</b>\nSo please be carefull and send all bugs to <b><u>@monkeBananchik</u></b> / <b><u>@IgorVasilekIV</u></b>", parse_mode="HTML")
 
 
 @router.message(Command("clear"))
 async def clear(message: types.Message):
     u = utils.user(message)
-    logger.debug(f"One of admins ({u.username}) requested memory clear. (clear command)")
     if u.id in master:
+        logger.debug(f"One of admins ({u.username}) requested memory clear. (clear command)")
         memory.pop(str(message.chat.id), None)
         save_memory(memory)
         await message.answer("<a href='tg://emoji?id=5811966564039135541'>🧽</a> Memory cleared.", parse_mode="HTML")
-"""    else:
+    else:
         logger.critical(f"@{u.username} / {u.id} tried to clear memory.")
         await message.reply("<b>Get off me!</b>", parse_mode="HTML")
-"""
+
 
 @router.message(Command("stop"))
 async def stop(message: types.Message):
@@ -136,7 +136,7 @@ async def ap(message: types.Message):
         )
     else:
         logger.critical(f"@{u.username} / {u.id} tried to access the admin panel without permission.")
-        await message.reply("<b>Get off me!</b>", parse_mode="HTML")
+        await message.reply("<b>You dont have permission to do this</b>", parse_mode="HTML")
 
 @router.message(Command("uptime"))
 async def cmd_uptime(message: types.Message):
