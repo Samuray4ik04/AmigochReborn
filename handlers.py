@@ -10,7 +10,13 @@ from loguru import logger
 import utils
 import time
 import datetime
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.fsm.context import FSMContext
 
+class UserMode(StatesGroup):
+    ai = State()
+    feedback = State()
+FSMContext.set_state(UserMode.ai)
 
 # Process start times (used for uptime)
 START_TIME = datetime.datetime.utcnow()
@@ -105,7 +111,7 @@ async def stop(message: types.Message):
         logger.critical(f"@{u.username} / {u.id} tried to stop the bot without permission.")
 
 
-@router.message(Command("admpanel"))
+@router.message(Command("ap"))
 async def ap(message: types.Message):
     u = utils.user(message)
     if u.id == master[0]:
@@ -139,7 +145,7 @@ async def ap(message: types.Message):
         await message.reply("<b>You dont have permission to do this</b>", parse_mode="HTML")
 
 @router.message(Command("uptime"))
-async def cmd_uptime(message: types.Message):
+async def uptime(message: types.Message):
     """Reply with uptime and Telegram API ping RTT."""
     now = datetime.datetime.utcnow()
     uptime = now - START_TIME
@@ -157,18 +163,38 @@ async def cmd_uptime(message: types.Message):
         f"• Started: <code>{START_TIME.strftime('%Y-%m-%d %H:%M:%S')} UTC</code>\n"
         f"• Uptime: <code>{utils.format_timedelta(uptime)}</code>\n\n"
         f"<a href='tg://emoji?id=5879585266426973039'>🌐</a> <b>Ping</b>\n"
-        f"• Telegram API RTT: <code>{ping_text}</code>"
+        f"• Telegram API RTT: <code>{ping_text}</code>\n\n"
+        f"• Version: {utils.version()}" 
     )
     await message.answer(text, parse_mode="HTML")
     logger.debug(f"User (@{utils.user(message).username}) requested uptime.")
 
+@router.message(Command("mode"))
+async def toggle_mode(message: types.Message, state: FSMContext):
+    """From AI to Feedback and revert"""
+    # Узнаем текущее состояние (вернет строку, например "UserMode:ai_chat", или None)
+    current_state = await state.get_state()
+    
+    # Логика переключения
+    # Обрати внимание: мы сравниваем со строковым значением состояния (.state)
+    if current_state == UserMode.ai.state:
+        await state.set_state(UserMode.feedback)
+        await message.answer("🔄 Режим переключен: 📝 <b>Фидбек</b>", parse_mode="HTML")
+        
+    elif current_state == UserMode.feedback.state:
+        await state.set_state(UserMode.ai)
+        await message.answer("🔄 Режим переключен: 🤖 <b>ИИ Чат</b>", parse_mode="HTML")
 
 @router.message()
-async def chat(message: types.Message):
+async def chat(message: types.Message, state: FSMContext):
     u = utils.user(message)
     logger.debug(f"Message from (@{u.username}) [{u.id}]: {message.text}")
-    reply = await ask_gemini(message.chat.id, message.text)
-    await message.reply(reply, parse_mode="HTML")
+    if state.get_state() == UserMode.ai.state:
+        reply_ai = await ask_gemini(message.chat.id, message.text)
+        await message.reply(reply_ai, parse_mode="HTML")
+    else:
+        reply_fb = await message.reply("I got your message, but not send it to owner\nPlease send /mode to enable AI.")
+        #await message.reply(reply_fb, parse_mode="HTML")
 """    if u.id in master:
         reply = await ask_gemini(message.chat.id, message.text)
         await message.reply(reply, parse_mode="HTML")
