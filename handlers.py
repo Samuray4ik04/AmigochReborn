@@ -16,7 +16,6 @@ from aiogram.fsm.context import FSMContext
 class UserMode(StatesGroup):
     ai = State()
     feedback = State()
-FSMContext.set_state(UserMode.ai)
 
 # Process start times (used for uptime)
 START_TIME = datetime.datetime.utcnow()
@@ -50,7 +49,6 @@ memory = load_memory()
 with open("prompt.txt", "r", encoding="utf-8") as f:
     prompt = f.read()
 
-# ===|Ask GenAI|===
 async def ask_gemini(chat_id: int, user_message: str):
     history = memory.get(str(chat_id), [])
 
@@ -67,8 +65,6 @@ async def ask_gemini(chat_id: int, user_message: str):
     save_memory(memory)
 
     return response.text
-
-
 
 # ===|Handlers|===
 @router.message(Command("start")) 
@@ -171,38 +167,33 @@ async def uptime(message: types.Message):
 
 @router.message(Command("mode"))
 async def toggle_mode(message: types.Message, state: FSMContext):
-    """From AI to Feedback and revert"""
-    # Узнаем текущее состояние (вернет строку, например "UserMode:ai_chat", или None)
-    current_state = await state.get_state()
-    
-    # Логика переключения
-    # Обрати внимание: мы сравниваем со строковым значением состояния (.state)
-    if current_state == UserMode.ai.state:
+    current = await state.get_state()
+
+    if current == UserMode.ai.state:
         await state.set_state(UserMode.feedback)
-        await message.answer("🔄 Режим переключен: 📝 <b>Фидбек</b>", parse_mode="HTML")
-        
-    elif current_state == UserMode.feedback.state:
+        await message.answer("<a href='tg://emoji?id=5877410604225924969'>🔄</a> Режим переключен: <a href='tg://emoji?id=5891169510483823323'>📝</a> <b>Фидбек</b>", parse_mode="HTML")
+
+    else:
         await state.set_state(UserMode.ai)
-        await message.answer("🔄 Режим переключен: 🤖 <b>ИИ Чат</b>", parse_mode="HTML")
+        await message.answer("<a href='tg://emoji?id=5877410604225924969'>🔄</a> Режим переключен: <a href='tg://emoji?id=5931415565955503486'>🤖</a> <b>ИИ Чат</b>", parse_mode="HTML")
 
 @router.message()
 async def chat(message: types.Message, state: FSMContext):
     u = utils.user(message)
+    current_state = await state.get_state()
     logger.debug(f"Message from (@{u.username}) [{u.id}]: {message.text}")
-    if state.get_state() == UserMode.ai.state:
-        reply_ai = await ask_gemini(message.chat.id, message.text)
-        await message.reply(reply_ai, parse_mode="HTML")
-    else:
-        reply_fb = await message.reply("I got your message, but not send it to owner\nPlease send /mode to enable AI.")
-        #await message.reply(reply_fb, parse_mode="HTML")
-"""    if u.id in master:
-        reply = await ask_gemini(message.chat.id, message.text)
-        await message.reply(reply, parse_mode="HTML")
-    else:
-        logger.critical(f"@{u.username} / {u.id} used the bot without permission.")
-        await message.reply("<b>Get off me!</b>", parse_mode="HTML")
-"""
 
+    if current_state == UserMode.ai.state:
+        reply_ai = await ask_gemini(message.chat.id, message.text)
+        return await message.reply(reply_ai, parse_mode="HTML")
+    elif current_state == UserMode.feedback.state:
+        fb_text = (
+            f"<a href='tg://emoji?id=5890741826230423364'>💬</a> Вам пришло сообщение!\n\n"
+            f"<a href='tg://emoji?id=5994809115740737538'>🐱</a> От: [@{u.username} / <code>{u.id}</code>]\n"
+            f"<a href='tg://emoji?id=5994495149336434048'>⭐️</a> Сообщение: <b>{message.text}</b>"
+        )
+        await bot.send_message(master[0], fb_text, parse_mode="HTML")
+        return await message.reply("Сообщение было отправлено.", parse_mode="HTML")
 
 # ===|AP Callbacks|===
 @router.callback_query(lambda c: c.data.startswith("ap_"))
