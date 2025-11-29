@@ -5,7 +5,10 @@ This file delegates to `main.main()` and runs it via asyncio.
 import asyncio
 import sys
 import subprocess
-
+try:
+    from loguru import logger
+except ImportError:
+    print("loguru is not installed. Installing...")
 try:
     subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-U"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     print("Requirements installed")
@@ -24,4 +27,7 @@ def _run():
 
 
 if __name__ == "__main__":
-    _run()
+    try:
+        _run()
+    except KeyboardInterrupt:
+        logger.info("Bot stopped from panel")

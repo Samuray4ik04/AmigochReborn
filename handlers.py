@@ -12,10 +12,14 @@ import time
 import datetime
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.memory import MemoryStorage
 
 class UserMode(StatesGroup):
     ai = State()
     feedback = State()
+
+class ReplyState(StatesGroup):
+    fb_reply_wait = State()
 
 # Process start times (used for uptime)
 START_TIME = datetime.datetime.utcnow()
@@ -66,9 +70,21 @@ async def ask_gemini(chat_id: int, user_message: str):
 
     return response.text
 
+if not os.path.exists("fb_blacklist.json"):
+    with open("fb_blacklist.json", "w", encoding="utf-8") as f:
+        f.write('{"blocked": []}')
+
+def get_fb_blacklist():
+    with open("fb_blacklist.json", "r", encoding="utf-8") as f:
+        return json.load(f)["blocked"]
+    
+def save_fb_blacklist(lst):
+    with open("fb_blacklist.json", "w", encoding="utf-8") as f:
+        json.dump({"blocked": lst}, f, indent=4)
+
 # ===|Handlers|===
 @router.message(Command("start")) 
-async def start(message: types.Message):
+async def start(message: types.Message, state: FSMContext):
     u = utils.user(message)
     if u.id in master:
         logger.debug(f"One of admins ({u.username}) started the bot. (start command)")
@@ -76,10 +92,10 @@ async def start(message: types.Message):
         await asyncio.sleep(0.5)
         await message.reply("Glad to see you, master <a href='tg://emoji?id=5335013413640748545'>😊</a>", parse_mode="HTML")
     else:
-        logger.critical(f"@{u.username} / {u.id} started the bot without permission.")
+        logger.critical(f"@{u.username} / {u.id} started the bot.")
         await message.reply(f"Yo, how you find me <a href='tg://user?id={u.id}'>{u.full_name}</a>?", parse_mode="HTML")
         await message.answer(f"<b>This is a test bot (<i>Version: {utils.version()}</i>)</b>\nSo please be carefull and send all bugs to <b><u>@monkeBananchik</u></b> / <b><u>@IgorVasilekIV</u></b>", parse_mode="HTML")
-
+    await state.set_state(UserMode.ai)
 
 @router.message(Command("clear"))
 async def clear(message: types.Message):
@@ -170,12 +186,36 @@ async def toggle_mode(message: types.Message, state: FSMContext):
     current = await state.get_state()
 
     if current == UserMode.ai.state:
+        if utils.user(message).id in get_fb_blacklist():
+            await state.set_state(UserMode.ai)
+            return await message.answer("<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
+            
         await state.set_state(UserMode.feedback)
         await message.answer("<a href='tg://emoji?id=5877410604225924969'>🔄</a> Режим переключен: <a href='tg://emoji?id=5891169510483823323'>📝</a> <b>Фидбек</b>", parse_mode="HTML")
 
     else:
         await state.set_state(UserMode.ai)
         await message.answer("<a href='tg://emoji?id=5877410604225924969'>🔄</a> Режим переключен: <a href='tg://emoji?id=5931415565955503486'>🤖</a> <b>ИИ Чат</b>", parse_mode="HTML")
+
+
+
+@router.callback_query(lambda c: c.data.startswith("fb_reply"))
+async def fb_callbacks (callback: types.CallbackQuery, state: FSMContext):
+    target_id = int(callback.data.split("_")[2])
+    await state.update_data(target_id=target_id)
+    await callback.message.answer("<a href='tg://emoji?id=6039779802741739617'>✏️</a> Напишите ваш ответ", parse_mode="HTML")
+    await state.set_state(ReplyState.fb_reply_wait)
+    await callback.answer()
+
+@router.message(ReplyState.fb_reply_wait)
+async def fb_reply(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    target_id = data["target_id"]
+    await bot.send_message(target_id, f"Вам ответили: <b>{message.text}</b>", parse_mode="HTML")
+    await message.answer ("Ответ отправлен.")
+    await state.clear()
+
+
 
 @router.message()
 async def chat(message: types.Message, state: FSMContext):
@@ -184,6 +224,7 @@ async def chat(message: types.Message, state: FSMContext):
     logger.debug(f"Message from (@{u.username}) [{u.id}]: {message.text}")
 
     if current_state == UserMode.ai.state:
+        await bot.send_chat_action(u.id, action="typing")
         reply_ai = await ask_gemini(message.chat.id, message.text)
         return await message.reply(reply_ai, parse_mode="HTML")
     elif current_state == UserMode.feedback.state:
@@ -192,10 +233,19 @@ async def chat(message: types.Message, state: FSMContext):
             f"<a href='tg://emoji?id=5994809115740737538'>🐱</a> От: [@{u.username} / <code>{u.id}</code>]\n"
             f"<a href='tg://emoji?id=5994495149336434048'>⭐️</a> Сообщение: <b>{message.text}</b>"
         )
-        await bot.send_message(master[0], fb_text, parse_mode="HTML")
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="Ответить", callback_data=f"fb_reply_{u.id}"),
+                InlineKeyboardButton(text="Забанить", callback_data=f"fb_block_{u.id}")
+            ]
+        ])
+
+        logger.debug(f"Forwarding feedback from {u.id} to master {master[0]} (callback buttons set)")
+        await bot.send_message(master[0], fb_text, parse_mode="HTML", reply_markup=keyboard)
+        await state.clear()
         return await message.reply("Сообщение было отправлено.", parse_mode="HTML")
 
-# ===|AP Callbacks|===
+# ===|Inline Callbacks|===
 @router.callback_query(lambda c: c.data.startswith("ap_"))
 async def ap_callbacks(callback: types.CallbackQuery):
     user = callback.from_user
@@ -240,3 +290,4 @@ async def ap_callbacks(callback: types.CallbackQuery):
         logger.debug(f"{user.username} stopped the bot.")
         await bot.session.close()
         os._exit(0)
+

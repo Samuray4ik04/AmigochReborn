@@ -1,4 +1,4 @@
-# TODO: разделение памяти, не жсон. медиа. фидбек. 
+# TODO: разделение памяти, не жсон. медиа. 
 
 
 import subprocess
@@ -7,13 +7,16 @@ import os
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
 import asyncio
+from aiogram.fsm.storage.memory import MemoryStorage
 from loguru import logger
 from handlers import router
 
 
+
 load_dotenv()
-bot = Bot(os.getenv("BOT_TOKEN"))
-dp = Dispatcher()
+storage = MemoryStorage()
+dp = Dispatcher(storage=storage)
+bot = Bot(token=os.getenv("BOT_TOKEN"))
 
 os.makedirs("logs", exist_ok=True)
 logger.add("logs/bot_{time}.log", level="DEBUG", rotation="10 MB", retention="1 month", compression="gz")
