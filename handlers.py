@@ -2,6 +2,7 @@ from aiogram import types, Router, Bot
 from aiogram.filters import Command
 import json
 import os
+import sys
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from dotenv import load_dotenv
 import asyncio
@@ -42,7 +43,7 @@ with open("prompt.txt", "r", encoding="utf-8") as f:
 
 db = Database('memory.db')
 
-master = [1078401181]
+master = [1078401181, 8386113624]
 
 
 # ===|Copilot interaction|===
@@ -99,7 +100,7 @@ async def start(message: types.Message, state: FSMContext):
     else:
         logger.critical(f"@{u.username} / {u.id} started the bot.")
         await message.reply(f"Yo, how you find me <a href='tg://user?id={u.id}'>{u.full_name}</a>?", parse_mode="HTML")
-        await message.answer(f"<b>This is a test bot (<i>Version: <code>{utils.version()}</code></i>)</b>\nSo please be carefull and send all bugs to <b><u>@monkeBananchik</u></b> / <b><u>@IgorVasilekIV</u></b>", parse_mode="HTML")
+        await message.answer(f"<b>This is a test bot (<i>Version: <code>{utils.version()}</code></i>)</b>\nSo please be carefull and send all bugs to <b><u>@revertPls</u></b> / <b><u>@IgorVasilekIV</u></b>", parse_mode="HTML")
     await state.set_state(UserMode.ai)
 
 @router.message(Command("clear"))
@@ -127,7 +128,7 @@ async def stop(message: types.Message):
 @router.message(Command("ap"))
 async def ap(message: types.Message):
     u = utils.user(message)
-    if u.id == master[0]:
+    if u.id in master:
         logger.debug(f"You ({u.username}) opened the admin panel.")
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -308,6 +309,16 @@ async def ap_callbacks(callback: types.CallbackQuery):
 
     elif action == "stop":
         await callback.message.answer("<a href='tg://emoji?id=5879995903955179148'>🛑</a> Stopping bot...", parse_mode="HTML")
+        await callback.answer()
         logger.debug(f"{user.username} stopped the bot.")
         await bot.session.close()
+        db.connection.close()
         os._exit(0)
+    
+    elif action == "restart":
+        await callback.message.answer("<a href='tg://emoji?id=5877410604225924969'>🔄</a> Restarting bot...", parse_mode="HTML")
+        await callback.answer()
+        logger.debug(f"{user.username} restarted the bot.")
+        await bot.session.close()
+        db.connection.close()
+        os.execl(sys.executable, sys.executable, "-m", "start")
