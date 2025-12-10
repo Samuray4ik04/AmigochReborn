@@ -20,3 +20,5 @@ __pycache__/
 
 # === System files ===
 Thumbs.db
+fb_blacklist.json
+memory.db
