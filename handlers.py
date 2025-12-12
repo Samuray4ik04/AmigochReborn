@@ -115,7 +115,7 @@ async def start(message: types.Message, state: FSMContext):
     u = utils.user(message)
     if u.id in master:
         logger.debug(f"One of admins ({u.username}) started the bot. (start command)")
-        await message.answer(f"Hi @{u.username} [<a href='tg://user?id={u.id}'>{u.first_name}</a>]! This is a test bot", parse_mode="HTML")
+        await message.answer(f"Hi <a href='tg://user?id={u.id}'>{u.first_name}</a> [{u.username}]! This is a test bot", parse_mode="HTML")
         await asyncio.sleep(0.5)
         await message.reply("Glad to see you, master <a href='tg://emoji?id=5335013413640748545'>😊</a>", parse_mode="HTML")
     else:
@@ -308,6 +308,9 @@ async def chat(message: types.Message, state: FSMContext):
 
 
     if current_state == UserMode.ai.state:
+        if not message.photo and not message.text:
+            return await message.reply("⚠️ <b>Я понимаю только текст и изображения</b>\nПожалуйста, не отправляйте видео, файлы или стикеры.", parse_mode="HTML")
+            
         await bot.send_chat_action(message.chat.id, action="typing")
 
         user_message = ""
@@ -334,7 +337,7 @@ async def chat(message: types.Message, state: FSMContext):
         logger.debug(f"Message from (@{u.username}) [{u.id}]: {user_message} Image included: {bool(image_data)}")
 
         reply_ai = await ask_copilot(message.chat.id, user_message, image_data=image_data)
-        await message.reply(reply_ai, parse_mode="HTML")    
+        await message.reply(reply_ai, parse_mode="HTML")
 
 
     elif current_state == UserMode.feedback.state:
