@@ -1,5 +1,5 @@
 from aiogram import types, Router, Bot
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 import json
 import os
 import sys
@@ -14,7 +14,10 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
 from database import Database
 from openai import OpenAI, OpenAIError
-
+import base64
+import io
+import aiohttp
+import urllib.parse
 
 class UserMode(StatesGroup):
     ai = State()
@@ -47,14 +50,31 @@ master = [1078401181, 8386113624]
 
 
 # ===|Copilot interaction|===
-async def ask_copilot(chat_id: int, user_message: str):
+async def ask_copilot(chat_id: int, user_message: str, image_data: str = None):
     HISTORY_LIMIT = 40
-    await asyncio.to_thread(db.add_message, chat_id, "user", user_message) 
+
+    db_text = f"[Photo] {user_message}" if image_data else user_message
+    await asyncio.to_thread(db.add_message, chat_id, "user", db_text) 
     history = await asyncio.to_thread(db.get_history, chat_id, limit=HISTORY_LIMIT)
     final_messages = [
         {"role": "system", "content": prompt}
     ]
     final_messages.extend(history)
+    
+    if image_data:
+        current_content = [
+            {"type": "text", "text": user_message if user_message else "Что на изображении?"},
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_data}"
+                }
+            }
+        ]
+    else:
+        current_content = user_message
+
+    final_messages.append({"role": "user", "content": current_content})
     
     try:
         response = client.chat.completions.create(
@@ -63,6 +83,7 @@ async def ask_copilot(chat_id: int, user_message: str):
         )
         
         reply_content = response.choices[0].message.content
+
         await asyncio.to_thread(db.add_message, chat_id, "assistant", reply_content)
         return reply_content
         
@@ -94,11 +115,11 @@ async def start(message: types.Message, state: FSMContext):
     u = utils.user(message)
     if u.id in master:
         logger.debug(f"One of admins ({u.username}) started the bot. (start command)")
-        await message.answer(f"Hi @{u.username} / <a href='{u.id}'>{u.first_name}</a>! This is a test bot", parse_mode="HTML")
+        await message.answer(f"Hi @{u.username} [<a href='tg://user?id={u.id}'>{u.first_name}</a>]! This is a test bot", parse_mode="HTML")
         await asyncio.sleep(0.5)
         await message.reply("Glad to see you, master <a href='tg://emoji?id=5335013413640748545'>😊</a>", parse_mode="HTML")
     else:
-        logger.critical(f"@{u.username} / {u.id} started the bot.")
+        logger.critical(f"@{u.username} [{u.id}] started the bot.")
         await message.reply(f"Yo, how you find me <a href='tg://user?id={u.id}'>{u.full_name}</a>?", parse_mode="HTML")
         await message.answer(f"<b>This is a test bot (<i>Version: <code>{utils.version()}</code></i>)</b>\nSo please be carefull and send all bugs to <b><u>@revertPls</u></b> / <b><u>@IgorVasilekIV</u></b>", parse_mode="HTML")
     await state.set_state(UserMode.ai)
@@ -106,7 +127,7 @@ async def start(message: types.Message, state: FSMContext):
 @router.message(Command("clear"))
 async def clear(message: types.Message):
     u = utils.user(message)
-    logger.debug(f"@{u.username} / @{u.id} requested memory clear")
+    logger.debug(f"@{u.username} [{u.id}] requested memory clear")
     db.clear_history(u.id)
     await message.answer("<a href='tg://emoji?id=5811966564039135541'>🧽</a> Memory cleared.", parse_mode="HTML")
 
@@ -227,17 +248,95 @@ async def fb_reply(message: types.Message, state: FSMContext):
     await state.clear()
 
 
+@router.message(Command("generate"))
+async def generate(message: types.Message, command: CommandObject):
+    args = command.args
+    user_id = message.from_user.id
+    
+    if not args:
+        await message.answer(
+            "Чтобы использовать эту команду, введите <code>/generate ваш запрос</code>\n\nРаботает на Pollinations.ai", 
+            parse_mode="HTML"
+        )
+        return
+
+    prompt = urllib.parse.quote_plus(args)
+    img_url = f"https://image.pollinations.ai/prompt/{prompt}"
+
+    try:
+        reply = await message.reply("🖼️ <b>Изображение генерируется, подождите...</b>", parse_mode="HTML")
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.get(img_url) as resp:
+                
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    raise Exception(f"Failed to fetch image. Status: {resp.status}, Response: {error_text[:100]}...")
+
+                content_type = resp.headers.get('Content-Type', '')
+                if 'image/' not in content_type:
+                    raise Exception(f"Received non-image content: {content_type}")
+                    
+                image_bytes = await resp.read()
+
+        await reply.delete()
+
+        await message.reply_photo(
+            types.BufferedInputFile(image_bytes, filename="generated_image.jpg"),
+            caption=f"<blockquote expandable><code>{args}</code></blockquote>",
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        await reply.delete()
+            
+        await message.reply(
+            f"<b>Ошибка при генерации изображения.</b>\n\n<blockquote expandable><code>{e}</code></blockquote>", 
+            parse_mode="HTML"
+        )
+        logger.exception(f"Image generation error for user {user_id}: {e}")
+
+
+@router.message(Command("donate"))
+async def donate(message: types.Message):
+    await message.answer(f"Пытался сделать этого бота максимально крутым, и был бы очень благодарен за поддержку. Если есть желание помочь развитию проекта, <b>вот</b> <a href='https://t.me/BioVasilek/10'>инфопост</a>", parse_mode="HTML")
 
 @router.message()
 async def chat(message: types.Message, state: FSMContext):
     u = utils.user(message)
     current_state = await state.get_state()
-    logger.debug(f"Message from (@{u.username}) [{u.id}]: {message.text}")
+
 
     if current_state == UserMode.ai.state:
         await bot.send_chat_action(message.chat.id, action="typing")
-        reply_ai = await ask_copilot(message.chat.id, message.text)
-        return await message.reply(reply_ai, parse_mode="HTML")
+
+        user_message = ""
+        image_data = None
+
+        if message.photo:
+            try:
+                photo = message.photo[-1]
+
+                img_buffer = io.BytesIO()
+                await bot.download(photo, destination=img_buffer)
+
+                img_bytes = img_buffer.getvalue()
+                image_data = base64.b64encode(img_bytes).decode('utf-8')
+
+                user_message = message.caption if message.caption else ""
+        
+            except Exception as e:
+                logger.exception(f"Failed to process image from user {u.id}: {e}")
+                return await message.reply(f"🐛 <b>Ошибка при обработке изображения, сообщите администрации</b> (/admins)\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
+        elif message.text:
+            user_message = message.text
+
+        logger.debug(f"Message from (@{u.username}) [{u.id}]: {user_message} Image included: {bool(image_data)}")
+
+        reply_ai = await ask_copilot(message.chat.id, user_message, image_data=image_data)
+        await message.reply(reply_ai, parse_mode="HTML")    
+
+
     elif current_state == UserMode.feedback.state:
         fb_text = (
             f"<a href='tg://emoji?id=5890741826230423364'>💬</a> Вам пришло сообщение!\n\n"
