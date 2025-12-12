@@ -32,4 +32,4 @@ def format_timedelta(td: datetime.timedelta) -> str:
     return " ".join(parts)
 
 def version():
-    return f"0.5.1-dev"
+    return f"0.5.2-dev"

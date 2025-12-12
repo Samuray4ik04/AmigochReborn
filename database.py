@@ -63,3 +63,27 @@ class Database:
             messages_count = self.cursor.execute("SELECT COUNT(*) FROM history").fetchone()[0]
             
             return user_count, messages_count
+        
+    def add_blacklist(self, user_id):
+        """Добавляет пользователя в черный список."""
+        with self.connection:
+            self.cursor.execute(
+                "INSERT OR IGNORE INTO blacklist (user_id) VALUES (?)",
+                (user_id,)
+            )
+    
+    def get_blacklist(self, user_id):
+        """Проверяет, есть ли пользователь в черном списке."""
+        self.cursor.execute(
+            "SELECT 1 FROM blacklist WHERE user_id = ?",
+            (user_id,)
+        )
+        return self.cursor.fetchone() is not None
+    
+    def remove_blacklist(self, user_id):
+        """Удаляет пользователя из черного списка."""
+        with self.connection:
+            self.cursor.execute(
+                "DELETE FROM blacklist WHERE user_id = ?",
+                (user_id,)
+            )

@@ -247,6 +247,21 @@ async def fb_reply(message: types.Message, state: FSMContext):
     await message.answer ("Ответ отправлен.")
     await state.clear()
 
+@router.callback_query(lambda c: c.data.startswith("fb_block"))
+async def fb_block(message: types.Message, callback: types.CallbackQuery):
+    target_id = int(callback.data.split("_")[2])
+    await db.add_blacklist(target_id)
+    await bot.send_message(target_id, f"<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
+    await callback.answer("🚫 Пользователь был заблокирован в фидбеке.")
+
+@router.message(Command("fb_unban"))
+async def fb_unban(message: types.Message, command: CommandObject):
+    args = command.args
+    if not args:
+        await message.answer("А кого разбанить то?")
+    try:
+        await db.remove_blacklist(int(args))
+        
 
 @router.message(Command("generate"))
 async def generate(message: types.Message, command: CommandObject):
