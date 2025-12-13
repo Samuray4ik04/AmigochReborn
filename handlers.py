@@ -248,20 +248,63 @@ async def fb_reply(message: types.Message, state: FSMContext):
     await state.clear()
 
 @router.callback_query(lambda c: c.data.startswith("fb_block"))
-async def fb_block(message: types.Message, callback: types.CallbackQuery):
+async def fb_block(callback: types.CallbackQuery):
     target_id = int(callback.data.split("_")[2])
-    await db.add_blacklist(target_id)
+    await asyncio.to_thread(db.add_blacklist, target_id)
     await bot.send_message(target_id, f"<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
     await callback.answer("🚫 Пользователь был заблокирован в фидбеке.")
 
 @router.message(Command("fb_unban"))
 async def fb_unban(message: types.Message, command: CommandObject):
     args = command.args
+
     if not args:
         await message.answer("А кого разбанить то?")
-    try:
-        await db.remove_blacklist(int(args))
         
+    try:
+        target_id = int(args)
+    except ValueError:
+        return await message.answer("⚠️ ID должен быть числом.")
+
+    is_banned = await asyncio.to_thread(db.is_blacklisted, target_id)
+
+    if is_banned:
+        try:
+            await asyncio.to_thread(db.remove_blacklist, target_id)
+            await message.answer("Пользователь был разбанен.")
+            await bot.send_message(target_id, "Вы были разбанены в фидбеке.")
+        except Exception as e:
+            logger.exception(f"Error while removing from blacklist: {e}")
+            await message.answer(f"Ошибка при попытке разбанить чела.\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
+    else:
+        await message.answer("Пользователь не был забанен.")
+
+        
+@router.message(Command("fb_ban"))
+async def fb_ban(message: types.Message, command: CommandObject):
+    args = command.args
+    
+    if not args:
+        await message.answer("А кого банить то?")
+        return
+    try:
+        target_id = int(args)
+    except ValueError:
+        return await message.answer("⚠️ ID должен быть числом.")
+
+    is_banned = await asyncio.to_thread(db.is_blacklisted, target_id)
+
+    if is_banned:
+        await message.answer("Пользователь уже был забанен.")
+    else:
+        try:
+            await asyncio.to_thread(db.add_blacklist, target_id)
+            await message.answer("Пользователь был забанен.")
+            await bot.send_message(args, "Вы были забанены в фидбеке.")
+        except Exception as e:
+            logger.exception(f"Error while tring to add user to blacklist: {e}")
+            await message.answer(f"Ошибка при попытке забанить чела.\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
+
 
 @router.message(Command("generate"))
 async def generate(message: types.Message, command: CommandObject):
