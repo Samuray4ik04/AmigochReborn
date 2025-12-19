@@ -46,7 +46,8 @@ with open("prompt.txt", "r", encoding="utf-8") as f:
 
 db = Database('memory.db')
 
-master = [1078401181, 8386113624]
+# я, саня, саша 
+master = [1078401181, 8386113624, 5802369201]
 
 
 # ===|Copilot interaction|===
@@ -89,11 +90,11 @@ async def ask_copilot(chat_id: int, user_message: str, image_data: str = None):
         
     except OpenAIError as e:
         logger.exception(f"OpenAI/Copilot API Error for {chat_id}: {e}")
-        return f"🐛 <b>Критическая ошибка в ИИ, сообщите о ней администрации</b> (/admins)\n\n<blockquote expandable><code>{e}</code></blockquote>"
+        return f"<a href='tg://emoji?id=5872829476143894491'>🐛</a> <b>Критическая ошибка в ИИ, сообщите о ней администрации</b> (/admins)\n\n<blockquote expandable><code>{e}</code></blockquote>"
 
     except Exception as e:
         logger.exception(f"Critical error in ask_copilot (non-API) for {chat_id}: {e}")
-        return f"🐛 <b>Критическая ошибка в ИИ, сообщите о ней администрации</b> (/admins)\n\n<blockquote expandable><code>{e}</code></blockquote>"
+        return f"<a href='tg://emoji?id=5872829476143894491'>🐛</a> <b>Критическая ошибка в ИИ, сообщите о ней администрации</b> (/admins)\n\n<blockquote expandable><code>{e}</code></blockquote>"
 
 
 # сука его тоже в дб надо записывать а не жсон
@@ -117,7 +118,7 @@ async def start(message: types.Message, state: FSMContext):
         logger.debug(f"One of admins ({u.username}) started the bot. (start command)")
         await message.answer(f"Hi <a href='tg://user?id={u.id}'>{u.first_name}</a> [{u.username}]! This is a test bot", parse_mode="HTML")
         await asyncio.sleep(0.5)
-        await message.reply("Glad to see you, master <a href='tg://emoji?id=5335013413640748545'>😊</a>", parse_mode="HTML")
+        await message.reply("Glad to see you, master <a href='tg://emoji?id=5765017520612315383'>💖</a>", parse_mode="HTML")
     else:
         logger.critical(f"@{u.username} [{u.id}] started the bot.")
         await message.reply(f"Yo, how you find me <a href='tg://user?id={u.id}'>{u.full_name}</a>?", parse_mode="HTML")
@@ -223,13 +224,16 @@ async def toggle_mode(message: types.Message, state: FSMContext):
 
 @router.message(Command("admins"))
 async def admins(message: types.Message):
+    igor_info = await bot.get_chat(master[0])
+    banan_info = await bot.get_chat("7671391676")
+    sasha_info = await bot.get_chat(master[2])
     await message.answer(
-        "<a href='tg://emoji?id=5335013413640748545'>😊</a> <b>Администраторы бота:</b>\n\n"
-        "• <i><a href='tg://user?id=1078401181'>IgorVasilekIV</a></i> (@IgorVasilekIV)\n"
-        "• <i><a href='tg://user?id=7671391676'>NoNickBTW</a></i> (@revertpls)",
+        "<a href='tg://emoji?id=5431378302075960714'>😊</a> <b>админчике и тд:</b>\n"
+        f"<blockquote expandable>• <i><a href='tg://user?id={master[0]}'>{igor_info.first_name}</a></i> (@{igor_info.username})\n"
+        f"• <i><a href='tg://user?id=7671391676'>{banan_info.first_name}</a></i> (@{banan_info.username})\n"
+        f"• <i><a href='tg://user?id={master[2]}'>{sasha_info.first_name}</a></i> (@{sasha_info.username})</blockquote>",
         parse_mode="HTML"
     )
-
 
 @router.callback_query(lambda c: c.data.startswith("fb_reply"))
 async def fb_callbacks (callback: types.CallbackQuery, state: FSMContext):
@@ -253,31 +257,33 @@ async def fb_block(callback: types.CallbackQuery):
     await asyncio.to_thread(db.add_blacklist, target_id)
     await bot.send_message(target_id, f"<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
     await callback.answer("🚫 Пользователь был заблокирован в фидбеке.")
+    nt = f"{callback.message.text}\n\n<b>======[<a href='tg://emoji?id=5208972891055473699'>⛔️</a> ЗАБАНЕН]======</b>"
+    await callback.message.edit_text(nt, parse_mode="HTML")
 
 @router.message(Command("fb_unban"))
 async def fb_unban(message: types.Message, command: CommandObject):
     args = command.args
 
     if not args:
-        await message.answer("А кого разбанить то?")
+        await message.answer("<a href='tg://emoji?id=5924719252379537729'>🤔</a> А кого разбанить то?", parse_mode="HTML")
         
     try:
         target_id = int(args)
     except ValueError:
-        return await message.answer("⚠️ ID должен быть числом.")
+        return await message.answer("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> ID должен быть числом.", parse_mode="HTML")
 
     is_banned = await asyncio.to_thread(db.is_blacklisted, target_id)
 
     if is_banned:
         try:
             await asyncio.to_thread(db.remove_blacklist, target_id)
-            await message.answer("Пользователь был разбанен.")
-            await bot.send_message(target_id, "Вы были разбанены в фидбеке.")
+            await message.answer("<a href='tg://emoji?id=5906995262378741881'>💖</a> Пользователь был разбанен.", parse_mode="HTML")
+            await bot.send_message(target_id, "Вы были разбанены в фидбеке.", parse_mode="HTML")
         except Exception as e:
             logger.exception(f"Error while removing from blacklist: {e}")
-            await message.answer(f"Ошибка при попытке разбанить чела.\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
+            await message.answer(f"<a href='tg://emoji?id=6019102674832595118'>⚠️</a> Ошибка при попытке разбанить чела.\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
     else:
-        await message.answer("Пользователь не был забанен.")
+        await message.answer("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> Пользователь не был забанен.")
 
         
 @router.message(Command("fb_ban"))
@@ -285,22 +291,22 @@ async def fb_ban(message: types.Message, command: CommandObject):
     args = command.args
     
     if not args:
-        await message.answer("А кого банить то?")
+        await message.answer("<a href='tg://emoji?id=5924719252379537729'>🤔</a> А кого банить то?")
         return
     try:
         target_id = int(args)
     except ValueError:
-        return await message.answer("⚠️ ID должен быть числом.")
+        return await message.answer("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> ID должен быть числом.", parse_mode="HTML")
 
     is_banned = await asyncio.to_thread(db.is_blacklisted, target_id)
 
     if is_banned:
-        await message.answer("Пользователь уже был забанен.")
+        await message.answer("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> Пользователь уже был забанен.")
     else:
         try:
             await asyncio.to_thread(db.add_blacklist, target_id)
-            await message.answer("Пользователь был забанен.")
-            await bot.send_message(args, "Вы были забанены в фидбеке.")
+            await message.answer("<a href='tg://emoji?id=5922712343011135025'>🚫</a> Пользователь был забанен.")
+            await bot.send_message(args, "<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
         except Exception as e:
             logger.exception(f"Error while tring to add user to blacklist: {e}")
             await message.answer(f"Ошибка при попытке забанить чела.\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
@@ -322,7 +328,7 @@ async def generate(message: types.Message, command: CommandObject):
     img_url = f"https://image.pollinations.ai/prompt/{prompt}"
 
     try:
-        reply = await message.reply("🖼️ <b>Изображение генерируется, подождите...</b>", parse_mode="HTML")
+        reply = await message.reply("<a href='tg://emoji?id=6026089641730382702'>🖼️</a> <b>Изображение генерируется, подождите...</b>", parse_mode="HTML")
         
         async with aiohttp.ClientSession() as session:
             async with session.get(img_url) as resp:
@@ -367,7 +373,7 @@ async def chat(message: types.Message, state: FSMContext):
 
     if current_state == UserMode.ai.state:
         if not message.photo and not message.text:
-            return await message.reply("⚠️ <b>Я понимаю только текст и изображения</b>\nПожалуйста, не отправляйте видео, файлы или стикеры.", parse_mode="HTML")
+            return await message.reply("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> <b>Я понимаю только текст и изображения</b>\nПожалуйста, не отправляйте видео, файлы или стикеры.", parse_mode="HTML")
             
         await bot.send_chat_action(message.chat.id, action="typing")
 
@@ -388,7 +394,7 @@ async def chat(message: types.Message, state: FSMContext):
         
             except Exception as e:
                 logger.exception(f"Failed to process image from user {u.id}: {e}")
-                return await message.reply(f"🐛 <b>Ошибка при обработке изображения, сообщите администрации</b> (/admins)\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
+                return await message.reply(f"<a href='tg://emoji?id=5872829476143894491'>🐛</a> <b>Ошибка при обработке изображения, сообщите администрации</b> (/admins)\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
         elif message.text:
             user_message = message.text
 
@@ -430,7 +436,7 @@ async def ap_callbacks(callback: types.CallbackQuery):
         except Exception as e:
             logger.exception(f"Failed to clear global memory: {e}")
             await callback.answer()
-            await callback.message.answer(f"⚠️ Ошибка при очистке памяти.\n\n<blockquote expandable><code>{e}</code></blockquote>")
+            await callback.message.answer(f"<a href='tg://emoji?id=6019102674832595118'>⚠️</a> Ошибка при очистке памяти.\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
 
     elif action == "stats":
         users_count, messages_count = db.stats()
@@ -448,7 +454,7 @@ async def ap_callbacks(callback: types.CallbackQuery):
         try:
             files = [f for f in os.listdir("logs") if f.startswith("bot_") and f.endswith(".log")]
             if not files:
-                await callback.answer("❌ Логи не найдены.", show_alert=True)
+                await callback.answer("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> Логи не найдены.", show_alert=True)
                 return
 
             latest_log = max(files, key=lambda f: os.path.getctime(os.path.join("logs", f)))
@@ -457,7 +463,7 @@ async def ap_callbacks(callback: types.CallbackQuery):
             logger.debug(f"📤 Sending log file: {latest_log}")
             await callback.message.answer_document(
                 document=types.FSInputFile(log_path),
-                caption=f"📄 Лог-файл: <code>{latest_log}</code>",
+                caption=f"<a href='tg://emoji?id=5839323457015256759'>📄</a> Лог-файл: <code>{latest_log}</code>",
                 parse_mode="HTML"
             )
 
@@ -465,7 +471,7 @@ async def ap_callbacks(callback: types.CallbackQuery):
         except Exception as e:
             logger.exception(f"Failed to send logs: {e}")
             await callback.answer()
-            await callback.message.answer(f"⚠️ Ошибка при отправке логов.\n\n<blockquote expandable><code>{e}</code></blockquote>")
+            await callback.message.answer(f"<a href='tg://emoji?id=6019102674832595118'>⚠️</a> Ошибка при отправке логов.\n\n<blockquote expandable><code>{e}</code></blockquote>")
 
     elif action == "stop":
         await callback.message.answer("<a href='tg://emoji?id=5879995903955179148'>🛑</a> Stopping bot...", parse_mode="HTML")
