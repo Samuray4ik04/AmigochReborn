@@ -1,0 +1,23 @@
+__pycache__/
+memory.db
+env-example
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+
+# Bot specific
+logs/
+*.log
+temp/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.docker/

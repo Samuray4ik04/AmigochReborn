@@ -1,0 +1,5 @@
+# обязательно переименуйте его в `.env`
+
+BOT_TOKEN= # https://t.me/BotFather api_key
+GEMINI_API_KEY= # https://aistudio.google.com/api-keys
+COPILOT_API_KEY= # https://github.com/settings/personal-access-tokens
