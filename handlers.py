@@ -41,7 +41,7 @@ bot = Bot(os.getenv("BOT_TOKEN"))
 client = OpenAI(api_key=gpt_token, base_url=endpoint)
 
 with open("prompt.txt", "r", encoding="utf-8") as f:
-    prompt = None #f.read()
+    prompt = f.read()
 
 
 db = Database('memory.db')
