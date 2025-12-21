@@ -144,7 +144,7 @@ async def stop(message: types.Message):
         os._exit(0)
     else:
         logger.critical(f"@{u.username} / {u.id} tried to stop the bot without permission.")
-        await message.reply(f"You don't have permission to use this command.")
+        await message.reply("You don't have permission to use this command.")
 
 
 @router.message(Command("ap"))
@@ -196,10 +196,10 @@ async def uptime(message: types.Message):
         ping_text = f"error ({e.__class__.__name__})"
 
     text = (
-        f"<a href='tg://emoji?id=5985616167740379273'>🤖</a> <b>Uptime</b>\n"
+        "<a href='tg://emoji?id=5985616167740379273'>🤖</a> <b>Uptime</b>\n"
         f"• Started: <code>{START_TIME.strftime('%Y-%m-%d %H:%M:%S')} UTC</code>\n"
         f"• Uptime: <code>{utils.format_timedelta(uptime)}</code>\n\n"
-        f"<a href='tg://emoji?id=5879585266426973039'>🌐</a> <b>Ping</b>\n"
+        "<a href='tg://emoji?id=5879585266426973039'>🌐</a> <b>Ping</b>\n"
         f"• Telegram API RTT: <code>{ping_text}</code>\n\n"
         f"• Version: <code>{utils.version()}</code>" 
     )
@@ -363,7 +363,17 @@ async def generate(message: types.Message, command: CommandObject):
 
 @router.message(Command("donate"))
 async def donate(message: types.Message):
-    await message.answer(f"Пытался сделать этого бота максимально крутым, и был бы очень благодарен за поддержку. Если есть желание помочь развитию проекта, <b>вот</b> <a href='https://t.me/BioVasilek/10'>инфопост</a>", parse_mode="HTML")
+    await message.answer("Пытался сделать этого бота максимально крутым, и был бы очень благодарен за поддержку. Если есть желание помочь развитию проекта, <b>вот</b> <a href='https://t.me/BioVasilek/10'>инфопост</a>\n\n<tg-spoiler>сука даже тут ИИ 🤔</tg-spoiler>", parse_mode="HTML")
+
+
+@router.message(Command("restart"))
+async def restart(message: types.Message):
+    await message.answer("<a href='tg://emoji?id=5877410604225924969'>🔄</a> Restarting bot...", parse_mode="HTML")
+    logger.debug(f"{utils.user(message).username} restarted the bot.")
+    await bot.session.close()
+    db.connection.close()
+    os.execl(sys.executable, sys.executable, "-m", "start")
+
 
 @router.message()
 async def chat(message: types.Message, state: FSMContext):
@@ -406,7 +416,7 @@ async def chat(message: types.Message, state: FSMContext):
 
     elif current_state == UserMode.feedback.state:
         fb_text = (
-            f"<a href='tg://emoji?id=5890741826230423364'>💬</a> Вам пришло сообщение!\n\n"
+            "<a href='tg://emoji?id=5890741826230423364'>💬</a> Вам пришло сообщение!\n\n"
             f"<a href='tg://emoji?id=5994809115740737538'>🐱</a> От: [@{u.username} / <code>{u.id}</code>]\n"
             f"<a href='tg://emoji?id=5994495149336434048'>⭐️</a> Сообщение: <b>{message.text}</b>"
         )
@@ -431,7 +441,7 @@ async def ap_callbacks(callback: types.CallbackQuery):
     if action == "clear_memory":
         try:
             db.clear_global_history()
-            logger.debug(f"All memory cleared.")
+            logger.debug("All memory cleared.")
             await callback.answer("🧽 Memory cleared.", show_alert=True)
         except Exception as e:
             logger.exception(f"Failed to clear global memory: {e}")
@@ -442,7 +452,7 @@ async def ap_callbacks(callback: types.CallbackQuery):
         users_count, messages_count = db.stats()
     
         stats_text = (
-            f"📊 Статистика бота:\n\n"
+            "📊 Статистика бота:\n\n"
             f"👤 Активных пользователей: {users_count}\n"
             f"💬 Сообщений в памяти: {messages_count}\n"
             f"💾 Тип базы: SQLite3 / v{utils.version()}"
