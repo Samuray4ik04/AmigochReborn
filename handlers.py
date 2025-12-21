@@ -211,14 +211,11 @@ async def toggle_mode(message: types.Message, state: FSMContext):
 
 @router.message(Command("admins"))
 async def admins(message: types.Message):
-    igor_info = await bot.get_chat(master[0])
-    banan_info = await bot.get_chat("7671391676")
-    sasha_info = await bot.get_chat(master[2])
     await message.answer(
         "<a href='tg://emoji?id=5431378302075960714'>😊</a> <b>админчике и тд:</b>\n"
-        f"<blockquote expandable>• <i><a href='tg://user?id={master[0]}'>{igor_info.first_name}</a></i> (@{igor_info.username})\n"
-        f"• <i><a href='tg://user?id=7671391676'>{banan_info.first_name}</a></i> (@{banan_info.username})\n"
-        f"• <i><a href='tg://user?id={master[2]}'>{sasha_info.first_name}</a></i> (@{sasha_info.username})</blockquote>",
+        f"<blockquote expandable>• <i><a href='tg://user?id=1078401181'>монке🦍</a></i> (@IgorVasilekIV)\n"
+        f"• <i><a href='tg://user?id=7671391676'>пися.</a></i> (@revertPls)\n"
+        f"• <i><a href='tg://user?id=5802369201'>snfsx | xsfns</a></i> (@snfsx)</blockquote>",
         parse_mode="HTML"
     )
 
@@ -358,7 +355,7 @@ async def restart(message: types.Message):
     await message.answer("<a href='tg://emoji?id=5877410604225924969'>🔄</a> Restarting bot...", parse_mode="HTML")
     logger.debug(f"{utils.user(message).username} restarted the bot.")
     await bot.session.close()
-    db.connection.close()
+    db.close()
     os.execl(sys.executable, sys.executable, "-m", "start")
 
 
@@ -475,7 +472,7 @@ async def ap_callbacks(callback: types.CallbackQuery):
         await callback.answer()
         logger.debug(f"{user.username} stopped the bot.")
         await bot.session.close()
-        db.connection.close()
+        db.close()
         os._exit(0)
     
     elif action == "restart":
@@ -483,5 +480,5 @@ async def ap_callbacks(callback: types.CallbackQuery):
         await callback.answer()
         logger.debug(f"{user.username} restarted the bot.")
         await bot.session.close()
-        db.connection.close()
+        db.close()
         os.execl(sys.executable, sys.executable, "-m", "start")

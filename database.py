@@ -2,7 +2,7 @@ import sqlite3
 import threading
 
 class Database:
-    def __init__(self, db_file):
+    def __init__(self, db_file: str):
         self.connection = sqlite3.connect(db_file, check_same_thread=False)
         self.lock = threading.Lock()
         self.create_table()
@@ -41,6 +41,7 @@ class Database:
     def get_history(self, user_id, limit=40):
         """
         Получает историю и форматирует её для OpenAI.
+        Возвращает список {'role': ..., 'content': ...} в хронологическом порядке.
         """
         with self.lock:
             cursor = self.connection.execute(
@@ -84,7 +85,7 @@ class Database:
             self.connection.execute("INSERT OR IGNORE INTO blacklist (user_id) VALUES (?)", (user_id,))
             self.connection.commit()
 
-    def remove_blacklist(self, user_id: int):
+    def remove_blacklist(self, user_id: int) -> None:
         """Убрать пользователя из ЧС"""
         with self.lock:
             self.connection.execute("DELETE FROM blacklist WHERE user_id = ?", (user_id,))
