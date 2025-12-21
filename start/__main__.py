@@ -6,21 +6,30 @@ import asyncio
 import sys
 import subprocess
 import os
+
 try:
     from loguru import logger
 except ImportError:
-    print("loguru is not installed. Installing...")
-try:
-    if os.getenv("IS_DOCKER"):
-        pass
-    else:
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-U"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        print("Requirements installed")
-except Exception as e:
-    print(f"An unexpected error occurred: {e}")
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("start")
+
+if os.getenv("IS_DOCKER"):
+    pass
+else:
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-U"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        logger.info("Requirements installed via pip")
+    except Exception as e:
+        logger.exception("Failed to auto-install requirements: {}", e)
 
 try:
-    # import the project's main coroutine
     from main import main as app_main
 except Exception as e:
     raise RuntimeError("Failed to import project entry point 'main.main'") from e

@@ -97,19 +97,6 @@ async def ask_copilot(chat_id: int, user_message: str, image_data: str = None):
         return f"<a href='tg://emoji?id=5872829476143894491'>🐛</a> <b>Критическая ошибка в ИИ, сообщите о ней администрации</b> (/admins)\n\n<blockquote expandable><code>{e}</code></blockquote>"
 
 
-# сука его тоже в дб надо записывать а не жсон
-if not os.path.exists("fb_blacklist.json"):
-    with open("fb_blacklist.json", "w", encoding="utf-8") as f:
-        f.write('{"blocked": []}')
-
-def get_fb_blacklist():
-    with open("fb_blacklist.json", "r", encoding="utf-8") as f:
-        return json.load(f)["blocked"]
-    
-def save_fb_blacklist(lst):
-    with open("fb_blacklist.json", "w", encoding="utf-8") as f:
-        json.dump({"blocked": lst}, f, indent=4)
-
 # ===|Handlers|===
 @router.message(Command("start")) 
 async def start(message: types.Message, state: FSMContext):
@@ -211,7 +198,7 @@ async def toggle_mode(message: types.Message, state: FSMContext):
     current = await state.get_state()
 
     if current == UserMode.ai.state:
-        if utils.user(message).id in get_fb_blacklist():
+        if await asyncio.to_thread(db.is_blacklisted, utils.user(message).id):
             await state.set_state(UserMode.ai)
             return await message.answer("<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
             
@@ -224,14 +211,11 @@ async def toggle_mode(message: types.Message, state: FSMContext):
 
 @router.message(Command("admins"))
 async def admins(message: types.Message):
-    igor_info = await bot.get_chat(master[0])
-    banan_info = await bot.get_chat("7671391676")
-    sasha_info = await bot.get_chat(master[2])
     await message.answer(
         "<a href='tg://emoji?id=5431378302075960714'>😊</a> <b>админчике и тд:</b>\n"
-        f"<blockquote expandable>• <i><a href='tg://user?id={master[0]}'>{igor_info.first_name}</a></i> (@{igor_info.username})\n"
-        f"• <i><a href='tg://user?id=7671391676'>{banan_info.first_name}</a></i> (@{banan_info.username})\n"
-        f"• <i><a href='tg://user?id={master[2]}'>{sasha_info.first_name}</a></i> (@{sasha_info.username})</blockquote>",
+        f"<blockquote expandable>• <i><a href='tg://user?id=1078401181'>монке🦍</a></i> (@IgorVasilekIV)\n"
+        f"• <i><a href='tg://user?id=7671391676'>пися.</a></i> (@revertPls)\n"
+        f"• <i><a href='tg://user?id=5802369201'>snfsx | xsfns</a></i> (@snfsx)</blockquote>",
         parse_mode="HTML"
     )
 
@@ -371,7 +355,7 @@ async def restart(message: types.Message):
     await message.answer("<a href='tg://emoji?id=5877410604225924969'>🔄</a> Restarting bot...", parse_mode="HTML")
     logger.debug(f"{utils.user(message).username} restarted the bot.")
     await bot.session.close()
-    db.connection.close()
+    db.close()
     os.execl(sys.executable, sys.executable, "-m", "start")
 
 
@@ -488,7 +472,7 @@ async def ap_callbacks(callback: types.CallbackQuery):
         await callback.answer()
         logger.debug(f"{user.username} stopped the bot.")
         await bot.session.close()
-        db.connection.close()
+        db.close()
         os._exit(0)
     
     elif action == "restart":
@@ -496,5 +480,5 @@ async def ap_callbacks(callback: types.CallbackQuery):
         await callback.answer()
         logger.debug(f"{user.username} restarted the bot.")
         await bot.session.close()
-        db.connection.close()
+        db.close()
         os.execl(sys.executable, sys.executable, "-m", "start")
