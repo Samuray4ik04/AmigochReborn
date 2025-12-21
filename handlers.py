@@ -97,19 +97,6 @@ async def ask_copilot(chat_id: int, user_message: str, image_data: str = None):
         return f"<a href='tg://emoji?id=5872829476143894491'>🐛</a> <b>Критическая ошибка в ИИ, сообщите о ней администрации</b> (/admins)\n\n<blockquote expandable><code>{e}</code></blockquote>"
 
 
-# сука его тоже в дб надо записывать а не жсон
-if not os.path.exists("fb_blacklist.json"):
-    with open("fb_blacklist.json", "w", encoding="utf-8") as f:
-        f.write('{"blocked": []}')
-
-def get_fb_blacklist():
-    with open("fb_blacklist.json", "r", encoding="utf-8") as f:
-        return json.load(f)["blocked"]
-    
-def save_fb_blacklist(lst):
-    with open("fb_blacklist.json", "w", encoding="utf-8") as f:
-        json.dump({"blocked": lst}, f, indent=4)
-
 # ===|Handlers|===
 @router.message(Command("start")) 
 async def start(message: types.Message, state: FSMContext):
@@ -211,7 +198,7 @@ async def toggle_mode(message: types.Message, state: FSMContext):
     current = await state.get_state()
 
     if current == UserMode.ai.state:
-        if utils.user(message).id in get_fb_blacklist():
+        if await asyncio.to_thread(db.is_blacklisted, utils.user(message).id):
             await state.set_state(UserMode.ai)
             return await message.answer("<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
             

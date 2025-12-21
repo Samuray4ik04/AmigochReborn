@@ -26,3 +26,7 @@ async def main():
         await dp.start_polling(bot)
     except Exception as e:
         logger.exception(f"Unknown error while stoping from panel: {e}")
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
