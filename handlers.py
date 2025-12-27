@@ -1,6 +1,7 @@
 from aiogram import types, Router, Bot
 from aiogram.filters import Command, CommandObject
 import json
+import html
 import os
 import sys
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -26,6 +27,10 @@ class UserMode(StatesGroup):
 class ReplyState(StatesGroup):
     fb_reply_wait = State()
 
+class AdminState(StatesGroup):
+    add_admin_wait = State()
+    remove_admin_wait = State()
+
 # Process start times (used for uptime)
 START_TIME = datetime.datetime.utcnow()
 START_MONO = time.monotonic()
@@ -38,7 +43,7 @@ endpoint = "https://models.github.ai/inference"
 model_name = "openai/gpt-4o-mini"
 bot = Bot(os.getenv("BOT_TOKEN"))
 
-client = OpenAI(api_key=gpt_token, base_url=endpoint)
+client = OpenAI(api_key=gpt_token, base_url=endpoint, timeout=30.0)
 
 with open("prompt.txt", "r", encoding="utf-8") as f:
     prompt = f.read()
@@ -47,7 +52,42 @@ with open("prompt.txt", "r", encoding="utf-8") as f:
 db = Database('memory.db')
 
 # я, саня, саша 
-master = [1078401181, 8386113624, 5802369201]
+master = [1078401181, 8386113624, 5802369201, 1131150026]
+
+for admin_id in master:
+    db.add_admin(admin_id)
+
+admin_cache = set(db.get_admins())
+
+RATE_LIMIT_SECONDS = 2.0
+IMAGE_MAX_BYTES = 5 * 1024 * 1024
+
+last_request_at: dict[str, float] = {}
+
+
+def is_admin(user_id: int) -> bool:
+    return user_id in admin_cache
+
+
+def h(text: str) -> str:
+    return html.escape(text or "")
+
+
+def rate_limit(key: str, interval_seconds: float = RATE_LIMIT_SECONDS) -> bool:
+    now = time.monotonic()
+    last = last_request_at.get(key, 0.0)
+    if now - last < interval_seconds:
+        return False
+    last_request_at[key] = now
+    return True
+
+
+def is_private_message(message: types.Message) -> bool:
+    return getattr(message.chat, "type", None) == "private"
+
+
+def is_private_callback(callback: types.CallbackQuery) -> bool:
+    return callback.message is not None and getattr(callback.message.chat, "type", None) == "private"
 
 
 # ===|Copilot interaction|===
@@ -81,6 +121,7 @@ async def ask_copilot(chat_id: int, user_message: str, image_data: str = None):
         response = client.chat.completions.create(
             model=model_name,
             messages=final_messages,
+            timeout=30.0,
         )
         
         reply_content = response.choices[0].message.content
@@ -113,20 +154,30 @@ def save_fb_blacklist(lst):
 # ===|Handlers|===
 @router.message(Command("start")) 
 async def start(message: types.Message, state: FSMContext):
+    if not is_private_message(message):
+        return
     u = utils.user(message)
-    if u.id in master:
+    if is_admin(u.id):
         logger.debug(f"One of admins ({u.username}) started the bot. (start command)")
-        await message.answer(f"Hi <a href='tg://user?id={u.id}'>{u.first_name}</a> [{u.username}]! This is a test bot", parse_mode="HTML")
+        await message.answer(
+            f"Hi <a href='tg://user?id={u.id}'>{h(u.first_name)}</a> [{h(u.username)}]! This is a test bot",
+            parse_mode="HTML",
+        )
         await asyncio.sleep(0.5)
         await message.reply("Glad to see you, master <a href='tg://emoji?id=5765017520612315383'>💖</a>", parse_mode="HTML")
     else:
         logger.critical(f"@{u.username} [{u.id}] started the bot.")
-        await message.reply(f"Yo, how you find me <a href='tg://user?id={u.id}'>{u.full_name}</a>?", parse_mode="HTML")
+        await message.reply(
+            f"Yo, how you find me <a href='tg://user?id={u.id}'>{h(u.full_name)}</a>?",
+            parse_mode="HTML",
+        )
         await message.answer(f"<b>This is a test bot (<i>Version: <code>{utils.version()}</code></i>)</b>\nSo please be carefull and send all bugs to <b><u>@revertPls</u></b> / <b><u>@IgorVasilekIV</u></b>", parse_mode="HTML")
     await state.set_state(UserMode.ai)
 
 @router.message(Command("clear"))
 async def clear(message: types.Message):
+    if not is_private_message(message):
+        return
     u = utils.user(message)
     logger.debug(f"@{u.username} [{u.id}] requested memory clear")
     db.clear_history(u.id)
@@ -135,8 +186,10 @@ async def clear(message: types.Message):
 
 @router.message(Command("stop"))
 async def stop(message: types.Message):
+    if not is_private_message(message):
+        return
     u = utils.user(message)
-    if u.id == master[0]:
+    if is_admin(u.id):
         logger.debug(f"You ({u.username}) stopped the bot. (stop command)")
         await message.answer("<a href='tg://emoji?id=5879995903955179148'>🛑</a> Bot stopped.\n\n<b>Check the panel</b>", parse_mode="HTML")
 
@@ -149,8 +202,10 @@ async def stop(message: types.Message):
 
 @router.message(Command("ap"))
 async def ap(message: types.Message):
+    if not is_private_message(message):
+        return
     u = utils.user(message)
-    if u.id in master:
+    if is_admin(u.id):
         logger.debug(f"You ({u.username}) opened the admin panel.")
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -160,6 +215,11 @@ async def ap(message: types.Message):
             [
                 InlineKeyboardButton(text="🧽 Clear Memory for All", callback_data="ap_clear_memory"),
                 InlineKeyboardButton(text="📊 Stats", callback_data="ap_stats")
+            ],
+            [
+                InlineKeyboardButton(text="➕ Add Admin", callback_data="ap_add_admin"),
+                InlineKeyboardButton(text="➖ Remove Admin", callback_data="ap_remove_admin"),
+                InlineKeyboardButton(text="📋 Admins", callback_data="ap_list_admins")
             ],
             [
                 InlineKeyboardButton(text="========= Bot =========", callback_data="void"),
@@ -183,6 +243,8 @@ async def ap(message: types.Message):
 
 @router.message(Command("uptime"))
 async def uptime(message: types.Message):
+    if not is_private_message(message):
+        return
     """Reply with uptime and Telegram API ping RTT."""
     now = datetime.datetime.utcnow()
     uptime = now - START_TIME
@@ -208,10 +270,12 @@ async def uptime(message: types.Message):
 
 @router.message(Command("mode"))
 async def toggle_mode(message: types.Message, state: FSMContext):
+    if not is_private_message(message):
+        return
     current = await state.get_state()
 
     if current == UserMode.ai.state:
-        if utils.user(message).id in get_fb_blacklist():
+        if await asyncio.to_thread(db.is_blacklisted, utils.user(message).id):
             await state.set_state(UserMode.ai)
             return await message.answer("<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
             
@@ -224,19 +288,24 @@ async def toggle_mode(message: types.Message, state: FSMContext):
 
 @router.message(Command("admins"))
 async def admins(message: types.Message):
-    igor_info = await bot.get_chat(master[0])
-    banan_info = await bot.get_chat("7671391676")
-    sasha_info = await bot.get_chat(master[2])
+    if not is_private_message(message):
+        return
+    admins_sorted = sorted(admin_cache)
+    admins_text = "\n".join([f"• <code>{admin_id}</code>" for admin_id in admins_sorted]) or "—"
     await message.answer(
-        "<a href='tg://emoji?id=5431378302075960714'>😊</a> <b>админчике и тд:</b>\n"
-        f"<blockquote expandable>• <i><a href='tg://user?id={master[0]}'>{igor_info.first_name}</a></i> (@{igor_info.username})\n"
-        f"• <i><a href='tg://user?id=7671391676'>{banan_info.first_name}</a></i> (@{banan_info.username})\n"
-        f"• <i><a href='tg://user?id={master[2]}'>{sasha_info.first_name}</a></i> (@{sasha_info.username})</blockquote>",
-        parse_mode="HTML"
+        "<a href='tg://emoji?id=5431378302075960714'>😊</a> <b>Админы (ID):</b>\n"
+        f"<blockquote expandable>{admins_text}</blockquote>",
+        parse_mode="HTML",
     )
 
 @router.callback_query(lambda c: c.data.startswith("fb_reply"))
 async def fb_callbacks (callback: types.CallbackQuery, state: FSMContext):
+    if not is_private_callback(callback):
+        await callback.answer()
+        return
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет прав.", show_alert=True)
+        return
     target_id = int(callback.data.split("_")[2])
     await state.update_data(target_id=target_id)
     await callback.message.answer("<a href='tg://emoji?id=6039779802741739617'>✏️</a> Напишите ваш ответ", parse_mode="HTML")
@@ -245,14 +314,24 @@ async def fb_callbacks (callback: types.CallbackQuery, state: FSMContext):
 
 @router.message(ReplyState.fb_reply_wait)
 async def fb_reply(message: types.Message, state: FSMContext):
+    if not is_private_message(message):
+        return
+    if not is_admin(message.from_user.id):
+        return
     data = await state.get_data()
     target_id = data["target_id"]
-    await bot.send_message(target_id, f"Вам ответили: <b>{message.text}</b>", parse_mode="HTML")
+    await bot.send_message(target_id, f"Вам ответили: <b>{h(message.text)}</b>", parse_mode="HTML")
     await message.answer ("Ответ отправлен.")
     await state.clear()
 
 @router.callback_query(lambda c: c.data.startswith("fb_block"))
 async def fb_block(callback: types.CallbackQuery):
+    if not is_private_callback(callback):
+        await callback.answer()
+        return
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Нет прав.", show_alert=True)
+        return
     target_id = int(callback.data.split("_")[2])
     await asyncio.to_thread(db.add_blacklist, target_id)
     await bot.send_message(target_id, f"<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
@@ -262,10 +341,16 @@ async def fb_block(callback: types.CallbackQuery):
 
 @router.message(Command("fb_unban"))
 async def fb_unban(message: types.Message, command: CommandObject):
+    if not is_private_message(message):
+        return
     args = command.args
 
     if not args:
         await message.answer("<a href='tg://emoji?id=5924719252379537729'>🤔</a> А кого разбанить то?", parse_mode="HTML")
+        return
+    if not is_admin(message.from_user.id):
+        await message.answer("<b>You don't have permission to do this</b>", parse_mode="HTML")
+        return
         
     try:
         target_id = int(args)
@@ -288,7 +373,13 @@ async def fb_unban(message: types.Message, command: CommandObject):
         
 @router.message(Command("fb_ban"))
 async def fb_ban(message: types.Message, command: CommandObject):
+    if not is_private_message(message):
+        return
     args = command.args
+
+    if not is_admin(message.from_user.id):
+        await message.answer("<b>You don't have permission to do this</b>", parse_mode="HTML")
+        return
     
     if not args:
         await message.answer("<a href='tg://emoji?id=5924719252379537729'>🤔</a> А кого банить то?")
@@ -306,14 +397,75 @@ async def fb_ban(message: types.Message, command: CommandObject):
         try:
             await asyncio.to_thread(db.add_blacklist, target_id)
             await message.answer("<a href='tg://emoji?id=5922712343011135025'>🚫</a> Пользователь был забанен.")
-            await bot.send_message(args, "<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
+            await bot.send_message(target_id, "<a href='tg://emoji?id=5922712343011135025'>🚫</a> Вы были заблокированы в фидбеке.", parse_mode="HTML")
         except Exception as e:
             logger.exception(f"Error while tring to add user to blacklist: {e}")
             await message.answer(f"Ошибка при попытке забанить чела.\n\n<blockquote expandable><code>{e}</code></blockquote>", parse_mode="HTML")
 
 
+@router.message(AdminState.add_admin_wait)
+async def add_admin_wait(message: types.Message, state: FSMContext):
+    if not is_private_message(message):
+        return
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        return
+
+    raw = (message.text or "").strip()
+    try:
+        target_id = int(raw)
+    except ValueError:
+        return await message.answer("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> ID должен быть числом.", parse_mode="HTML")
+
+    if target_id in admin_cache:
+        await message.answer("<a href='tg://emoji?id=5924719252379537729'>🤔</a> Уже админ.", parse_mode="HTML")
+        await state.clear()
+        return
+
+    await asyncio.to_thread(db.add_admin, target_id)
+    admin_cache.add(target_id)
+    await message.answer("<a href='tg://emoji?id=5906995262378741881'>💖</a> Админ добавлен.", parse_mode="HTML")
+    await state.clear()
+
+
+@router.message(AdminState.remove_admin_wait)
+async def remove_admin_wait(message: types.Message, state: FSMContext):
+    if not is_private_message(message):
+        return
+    if not is_admin(message.from_user.id):
+        await state.clear()
+        return
+
+    raw = (message.text or "").strip()
+    try:
+        target_id = int(raw)
+    except ValueError:
+        return await message.answer("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> ID должен быть числом.", parse_mode="HTML")
+
+    if target_id not in admin_cache:
+        await message.answer("<a href='tg://emoji?id=5924719252379537729'>🤔</a> Это не админ.", parse_mode="HTML")
+        await state.clear()
+        return
+
+    if target_id == message.from_user.id:
+        await message.answer("<a href='tg://emoji?id=5924719252379537729'>🤔</a> Нельзя удалить самого себя.", parse_mode="HTML")
+        await state.clear()
+        return
+
+    if len(admin_cache) <= 1:
+        await message.answer("<a href='tg://emoji?id=5924719252379537729'>🤔</a> Нельзя удалить последнего админа.", parse_mode="HTML")
+        await state.clear()
+        return
+
+    await asyncio.to_thread(db.remove_admin, target_id)
+    admin_cache.discard(target_id)
+    await message.answer("<a href='tg://emoji?id=5906995262378741881'>💖</a> Админ удалён.", parse_mode="HTML")
+    await state.clear()
+
 @router.message(Command("generate"))
 async def generate(message: types.Message, command: CommandObject):
+    if not is_private_message(message):
+        return
     args = command.args
     user_id = message.from_user.id
     
@@ -324,13 +476,17 @@ async def generate(message: types.Message, command: CommandObject):
         )
         return
 
+    if not rate_limit(f"generate:{user_id}"):
+        return await message.reply("<a href='tg://emoji?id=5924719252379537729'>⏳</a> Слишком часто. Подожди пару секунд.", parse_mode="HTML")
+
     prompt = urllib.parse.quote_plus(args)
     img_url = f"https://image.pollinations.ai/prompt/{prompt}"
 
     try:
         reply = await message.reply("<a href='tg://emoji?id=6026089641730382702'>🖼️</a> <b>Изображение генерируется, подождите...</b>", parse_mode="HTML")
-        
-        async with aiohttp.ClientSession() as session:
+
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(img_url) as resp:
                 
                 if resp.status != 200:
@@ -347,7 +503,7 @@ async def generate(message: types.Message, command: CommandObject):
 
         await message.reply_photo(
             types.BufferedInputFile(image_bytes, filename="generated_image.jpg"),
-            caption=f"<blockquote expandable><code>{args}</code></blockquote>",
+            caption=f"<blockquote expandable><code>{h(args)}</code></blockquote>",
             parse_mode="HTML"
         )
 
@@ -363,11 +519,18 @@ async def generate(message: types.Message, command: CommandObject):
 
 @router.message(Command("donate"))
 async def donate(message: types.Message):
+    if not is_private_message(message):
+        return
     await message.answer("Пытался сделать этого бота максимально крутым, и был бы очень благодарен за поддержку. Если есть желание помочь развитию проекта, <b>вот</b> <a href='https://t.me/BioVasilek/10'>инфопост</a>\n\n<tg-spoiler>сука даже тут ИИ 🤔</tg-spoiler>", parse_mode="HTML")
 
 
 @router.message(Command("restart"))
 async def restart(message: types.Message):
+    if not is_private_message(message):
+        return
+    if not is_admin(utils.user(message).id):
+        await message.answer("<b>You don't have permission to do this</b>", parse_mode="HTML")
+        return
     await message.answer("<a href='tg://emoji?id=5877410604225924969'>🔄</a> Restarting bot...", parse_mode="HTML")
     logger.debug(f"{utils.user(message).username} restarted the bot.")
     await bot.session.close()
@@ -377,6 +540,8 @@ async def restart(message: types.Message):
 
 @router.message()
 async def chat(message: types.Message, state: FSMContext):
+    if not is_private_message(message):
+        return
     u = utils.user(message)
     current_state = await state.get_state()
 
@@ -384,7 +549,10 @@ async def chat(message: types.Message, state: FSMContext):
     if current_state == UserMode.ai.state:
         if not message.photo and not message.text:
             return await message.reply("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> <b>Я понимаю только текст и изображения</b>\nПожалуйста, не отправляйте видео, файлы или стикеры.", parse_mode="HTML")
-            
+
+        if not rate_limit(f"chat:{u.id}"):
+            return await message.reply("<a href='tg://emoji?id=5924719252379537729'>⏳</a> Слишком часто. Подожди пару секунд.", parse_mode="HTML")
+
         await bot.send_chat_action(message.chat.id, action="typing")
 
         user_message = ""
@@ -398,6 +566,8 @@ async def chat(message: types.Message, state: FSMContext):
                 await bot.download(photo, destination=img_buffer)
 
                 img_bytes = img_buffer.getvalue()
+                if len(img_bytes) > IMAGE_MAX_BYTES:
+                    return await message.reply("<a href='tg://emoji?id=6019102674832595118'>⚠️</a> Изображение слишком большое.", parse_mode="HTML")
                 image_data = base64.b64encode(img_bytes).decode('utf-8')
 
                 user_message = message.caption if message.caption else ""
@@ -408,7 +578,8 @@ async def chat(message: types.Message, state: FSMContext):
         elif message.text:
             user_message = message.text
 
-        logger.debug(f"Message from (@{u.username}) [{u.id}]: {user_message} Image included: {bool(image_data)}")
+        msg_len = len(user_message) if user_message else 0
+        logger.debug(f"Message from (@{u.username}) [{u.id}]: len={msg_len} Image included: {bool(image_data)}")
 
         reply_ai = await ask_copilot(message.chat.id, user_message, image_data=image_data)
         await message.reply(reply_ai, parse_mode="HTML")
@@ -417,8 +588,8 @@ async def chat(message: types.Message, state: FSMContext):
     elif current_state == UserMode.feedback.state:
         fb_text = (
             "<a href='tg://emoji?id=5890741826230423364'>💬</a> Вам пришло сообщение!\n\n"
-            f"<a href='tg://emoji?id=5994809115740737538'>🐱</a> От: [@{u.username} / <code>{u.id}</code>]\n"
-            f"<a href='tg://emoji?id=5994495149336434048'>⭐️</a> Сообщение: <b>{message.text}</b>"
+            f"<a href='tg://emoji?id=5994809115740737538'>🐱</a> От: [@{h(u.username)} / <code>{u.id}</code>]\n"
+            f"<a href='tg://emoji?id=5994495149336434048'>⭐️</a> Сообщение: <b>{h(message.text)}</b>"
         )
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
@@ -434,9 +605,15 @@ async def chat(message: types.Message, state: FSMContext):
 
 # ===|Inline Callbacks|===
 @router.callback_query(lambda c: c.data.startswith("ap_"))
-async def ap_callbacks(callback: types.CallbackQuery):
+async def ap_callbacks(callback: types.CallbackQuery, state: FSMContext):
     user = callback.from_user
     action = callback.data.split("_")[1]
+    if not is_private_callback(callback):
+        await callback.answer()
+        return
+    if not is_admin(user.id):
+        await callback.answer("Нет прав.", show_alert=True)
+        return
 
     if action == "clear_memory":
         try:
@@ -459,6 +636,22 @@ async def ap_callbacks(callback: types.CallbackQuery):
         )
     
         await callback.answer(stats_text, show_alert=True)
+
+    elif action == "add":
+        await callback.message.answer("Введите ID пользователя, которого нужно сделать админом.")
+        await callback.answer()
+        await state.set_state(AdminState.add_admin_wait)
+
+    elif action == "remove":
+        await callback.message.answer("Введите ID пользователя, которого нужно убрать из админов.")
+        await callback.answer()
+        await state.set_state(AdminState.remove_admin_wait)
+
+    elif action == "list":
+        admins_sorted = sorted(admin_cache)
+        admins_text = "\n".join([f"• <code>{admin_id}</code>" for admin_id in admins_sorted]) or "—"
+        await callback.message.answer(f"<b>Admins</b>\n{admins_text}", parse_mode="HTML")
+        await callback.answer()
 
     elif action == "logs":
         try:

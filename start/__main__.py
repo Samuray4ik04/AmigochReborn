@@ -4,20 +4,15 @@ This file delegates to `main.main()` and runs it via asyncio.
 """
 import asyncio
 import sys
-import subprocess
 import os
 try:
     from loguru import logger
 except ImportError:
-    print("loguru is not installed. Installing...")
-try:
-    if os.getenv("IS_DOCKER"):
-        pass
-    else:
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt", "-U"], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        print("Requirements installed")
-except Exception as e:
-    print(f"An unexpected error occurred: {e}")
+    print("loguru is not installed.")
+    class _Logger:
+        def info(self, msg: str) -> None:
+            print(msg)
+    logger = _Logger()
 
 try:
     # import the project's main coroutine
